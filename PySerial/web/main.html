@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="description" content="Free Web tutorials">
+    <meta name="keywords" content="HTML,CSS,XML,JavaScript">
+    <meta name="author" content="Pham Trung Duc">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reading RFID</title>
+    <link rel="stylesheet" type="text/css" href="bootstrap.min.css">
+    <script type="text/javascript" src="jquery-3.4.1.min.js"></script>
+    <script type="text/javascript" src="Chart.bundle.min.js"></script>
+    <script type="text/javascript" src="Gauge.js"></script>
+    <script type="text/javascript" src="bootstrap.bundle.min.js"></script>
+    <script type="text/javascript" src="eel.js"></script>
+    <style>
+        #ShowTime {letter-spacing:5px;color:#ffffff;padding:4px;border-radius: 4px;text-align: center;}
+        #ShowID {letter-spacing:5px;color:#ffffff;padding:4px;background: #00A8FF;border-radius: 4px;text-align: center;}
+    </style>
+</head>
+<body>
+    <div class="container-fluid bg-dark" style="height:100vh;">
+        <div class="col col-12 m-0 p-0">
+            <div class="row justify-content-center">
+                <form class="form-inline">
+                  <div class="form-group mb-2">
+                    <label for="inputPort" class="text-white font-weight-bold">Port:&nbsp;&nbsp;</label>
+                    <input type="text" class="form-control mr-4" id="inputPort" placeholder="Example: COM4">
+                    <label for="inputBaudrate" class="text-white font-weight-bold">Baudrate:&nbsp;&nbsp;</label>
+                    <input type="number" class="form-control" id="inputBaudrate" placeholder="Example: 9600">
+                    <div class="btn-group my-1 mx-md-1" role="group" aria-label="Control">
+                    <button type="button" class="btn btn-primary" onclick="callPort(document.getElementById('inputPort').value,document.getElementById('inputBaudrate').value)">Confirm</button>
+                    <button type="button" class="btn btn-warning" onclick="clearData()">ClearData</button>
+                    <button type="button" class="btn btn-info" onclick="downloadJSON(GLOBAL.data,'Untitled','text')"><img src="img/save.ico" alt="Save icon" style="width:20px;height:20px"> JSON</button> 
+                    <button type="button" class="btn btn-info" id="SaveCSV" onclick="downloadCSV(GLOBAL.data,'Untitled.csv','text/csv;charset=UTF-8')"><img src="img/save.ico" alt="Save icon" style="width:20px;height:20px"> CSV</button>
+                   </div>
+                   </div>
+                </form>
+        </div>
+
+        <div class="row justify-content-center" >
+            <div id="ShowTime" class="display-3 text-muted"onload="showTimer()"></div>
+        </div>
+        <div class="row justify-content-center">
+            <div class="alert alert-danger collapse"
+        role="alert" id="invalidAlert"> This is a danger alert—check it out! </div>
+        </div>
+
+    <div class="row justify-content-center">
+         <h1 class="text-white display-1">Card ID: <span id="ShowID" class="badge bg-secondary mr-4">0000</span> 
+         <span id="status_in" class="badge badge-pill bg-success">IN</span>
+         <span id="status_out" class="badge badge-pill bg-danger">OUT</span>
+        <!-- </div> -->
+         </h1>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col col-3 p-1">
+         <button type="button" class="slot btn btn-success btn-block" >Slot 1</button>       
+        </div>
+        <div class="col col-3 p-1">
+         <button type="button" class="slot btn btn-success btn-block">Slot 2</button>       
+        </div>
+        <div class="col col-3 p-1">
+         <button type="button" class="slot btn btn-success btn-block">Slot 3</button>       
+        </div>
+        <div class="col col-3 p-1">
+         <button type="button" class="slot btn btn-success btn-block">Slot 4</button>       
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+    $('#status_in').hide();
+    $('#status_out').hide();
+    async function callPort(port,baudrate)
+    {   
+        baud = parseInt(baudrate)
+        await eel.callPort(port,baud,1);
+    }
+
+    eel.expose(invalid);
+    function invalid(error)
+    {
+        $('#invalidAlert').html(error);
+        $('#invalidAlert').show();
+    }
+
+    eel.expose(valid);
+    function valid()
+    {
+        $('#invalidAlert').hide();
+    }
+
+    var GLOBAL= GLOBAL || {};
+    GLOBAL.data=[];
+
+    async function updateCurrent()
+    {   
+        if(typeof park_to_slot.parking=="undefined")
+            park_to_slot.parking = false;
+
+        if(typeof updateCurrent.is_changed=="undefined")
+            updateCurrent.is_changed = false;
+
+        let data = await eel.get_id()();
+
+        let id = data.id;
+        if(!id)
+        {
+            $("#ShowID").html("Null Value");
+            $('#status_out').hide();
+            $('#status_in').hide();
+            updateCurrent.is_changed = false;
+        }
+        else
+        {
+            if(!updateCurrent.is_changed)
+            {
+                updateCurrent.is_changed = true;
+                park_to_slot.parking = false;
+                $("#ShowID").html(id);
+
+                let slot = await eel.get_car_out()();
+                if(slot==-1)
+                {
+                    // console.log("Parking Car...", id);
+                }
+                else //Get car out
+                {
+                    // console.log("Get car", id, "slot ", slot,"out of the parking place");
+                    $('#status_out').show();
+                    let slot_btns = $(".slot");
+                    let classes = slot_btns[slot].classList;
+                    classes.add("btn-success")
+                    classes.remove("btn-danger");
+                }
+            }
+        }
+
+
+    }
+    setInterval(updateCurrent,50)
+
+
+    async function park_to_slot(index)
+    {
+        // if(typeof park_to_slot.parking=="undefined")
+        //     park_to_slot.parking = false;
+
+        if(!park_to_slot.parking)
+        {
+            park_to_slot.parking = true;
+            let check_slots = await eel.get_check_slots()();
+            let data = await eel.get_id()();
+            let id = data.id;
+            if(check_slots[index]==null && id)
+            {
+                eel.park_in_slot(parseInt(index), id);
+                $('#status_in').show();
+                console.log("Slot ", index, "is busy.");
+                // GLOBAL.data.push(id);
+                let slot_btns = $(".slot");
+                let classes = slot_btns[index].classList;
+                classes.add("btn-danger")
+                classes.remove("btn-success");
+            }
+        }
+    };
+
+    // Initialize Lanes 
+    function initialSlots()
+    {
+        let slot_btns = $(".slot");
+        for(let index in slot_btns)
+        {
+            slot_btns[index].onclick = async function(){park_to_slot(index)};
+        }
+    }
+    initialSlots();
+
+
+    // Function to download data to a JSON file
+    function downloadJSON(data, filename, type) {
+        data = JSON.stringify(data);
+        var file = new Blob([data], {type: type});
+        if (window.navigator.msSaveOrOpenBlob) // IE10+
+            window.navigator.msSaveOrOpenBlob(file, filename);
+        else { // Others
+            var a = document.createElement("a"),
+                    url = URL.createObjectURL(file);
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);  
+            }, 0); 
+        }
+    }
+
+     function downloadCSV(data, filename, type) {
+        var array = typeof data != 'object' ? JSON.parse(data) : data;
+        var data = '';
+
+        for (var i = 0; i < array.length; i++) {
+            var line = '';
+            for (var index in array[i]) {
+                if (line != '') line += ','
+
+                line += array[i][index];
+            }
+
+            data += line + '\r\n';
+        }
+
+        var file = new Blob([data], {type: type});
+        if (window.navigator.msSaveOrOpenBlob) // IE10+
+            window.navigator.msSaveOrOpenBlob(file, filename);
+        else { // Others
+            var a = document.createElement("a"),
+                    url = URL.createObjectURL(file);
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);  
+            }, 0); 
+        }
+    }
+    function clearData()
+    {   
+        GLOBAL.data=[];
+    }
+
+    function showTimer()
+    {
+        var date = new Date();
+            var h = date.getHours(); // 0 - 23
+            var m = date.getMinutes(); // 0 - 59
+            var s = date.getSeconds(); // 0 - 59
+            var ms = date.getMilliseconds();
+            
+            h = (h < 10) ? "0" + h : h;
+            m = (m < 10) ? "0" + m : m;
+            s = (s < 10) ? "0" + s : s;
+            ms =(ms<10)? "0"+ ms:ms;          
+            ms =(ms<100)? "0"+ ms:ms;          
+            var time = h + ":" + m + ":" + s+'.'+ms;
+        $("#ShowTime").html(time);
+        setTimeout(showTimer,50);
+    }
+    showTimer();
+    
+</script>
+
+</body>
+</html>
